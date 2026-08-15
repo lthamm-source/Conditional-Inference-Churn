@@ -1,0 +1,87 @@
+---
+title: "CTREE Churn Explanation"
+author: "Lucas Thamm"
+date: "2025-11-17"
+output: pdf_document
+---
+
+```{r FullCode, message=FALSE, warning=FALSE, include=FALSE}
+library(partykit)
+library(caret)
+#load("C:/Users/Lucas/Desktop/Seminar DS/Churn.RData")
+load("C:/Users/User/Desktop/Seminar DS/Churn.RData")
+set.seed(123) 
+train_index <- sample(1:nrow(data), 0.7 * nrow(data))
+train <- data[train_index, ]
+test  <- data[-train_index, ]
+
+#Cross-validate alpha
+train_control <- trainControl(
+  method = "cv",
+  number = 10,
+  verboseIter = TRUE,
+  classProbs = FALSE,
+  summaryFunction = defaultSummary,
+  savePredictions = "final"
+)
+
+tune_grid <- expand.grid(mincriterion = seq(0.90, 0.99, by = 0.01))
+
+set.seed(123) 
+train(
+  Churn ~ ., data = train,
+  method = "ctree",
+  trControl = train_control,
+  tuneGrid = tune_grid
+)
+
+best_mincriterion <- 0.99
+
+final_model <- ctree(
+  Churn ~ .,
+  data = train,
+  control = ctree_control(mincriterion = best_mincriterion)
+)
+
+# Cross-validate accuracy
+train_control <- trainControl(
+  method = "cv",
+  number = 10,
+  summaryFunction = defaultSummary
+)
+
+# Grid with the BEST value only
+final_grid <- expand.grid(mincriterion = best_mincriterion)
+
+set.seed(123)
+cv_final <- train(
+  Churn ~ ., data = train,
+  method = "ctree",
+  trControl = train_control,
+  tuneGrid = final_grid,
+  metric = "Accuracy"
+)
+
+cv_final
+
+pred_class <- predict(cv_final, newdata = test)
+pred_prob <- predict(cv_final, newdata = test, type = "prob")
+table(Predicted = pred_class, Actual = test$Churn)
+mean(pred_class == test$Churn)
+```
+
+```{r echo=FALSE, fig.height=5, fig.width=10}
+plot(final_model)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(knitr)
+library(kableExtra)
+
+conf_df <- as.data.frame.matrix(table(Predicted = pred_class, Actual = test$Churn))
+colnames(conf_df) <- c("No (Actual)", "Yes (Actual)")
+rownames(conf_df) <- c("No (Predicted)", "Yes (Predicted)")
+kable(conf_df, caption = "Confusion Matrix") %>% 
+  kable_styling(full_width = FALSE, position = "center")
+```
+
